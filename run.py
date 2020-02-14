@@ -1,15 +1,13 @@
-from auto_correct import AutoCorrector
-from tqdm import tqdm
-# from ultis import evaluate
+import pandas as pd
+from ultis import unikey_typos_handler, encode_numbers, decode_numbers
+from segment import segment
+from correct import correct
 
+text = "chicucthuequa12"
 
-corrector = AutoCorrector(max_edit_distance=1)
-print('Loading corrector...')
-corrector.load()
-print('Finish loading')
-print('Start predicting')
-# for i in tqdm(range(100)):
-#     doc = "\n".join(open('Wiki_test_file/test_' + str(i) + '.txt', 'r', encoding='utf-8').readlines()[:5])
-#     corrected_doc = "\n".join(corrector.correct(doc))
-#     open('result_5_line/correct_' + str(i) + '.txt', 'w+', encoding='utf-8').write(corrected_doc)
-print(corrector.correct('câu lạc bộ arsenal thắng 5 bàn'))
+text, numbers = encode_numbers(text)
+result = unikey_typos_handler(text)
+result = segment(result)
+# result = correct(result)
+result = decode_numbers(result, numbers)
+print(result)
