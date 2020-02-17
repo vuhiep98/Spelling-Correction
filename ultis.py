@@ -1,6 +1,8 @@
 import pandas as pd
 import re
 
+from dictionary import UNIGRAM
+
 def remove_diacritics(text):
 	diacritic_characters = u'ÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝàáâãèéêìíòóôõùúý'+\
 			'ĂăĐđĨĩŨũƠơƯưẠạẢảẤấẦầẨẩẪẫẬậẮắẰằẲẳẴẵẶặ'+\
@@ -69,13 +71,17 @@ def decode_numbers(text, numbers):
 
 ALPHABET = "abcdefghijklmnopqrstuvwxyzâăđêôơưàáảãạằắẳẵặấầẩẫậềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ"
 
-def edit(text):
-	if len(text) > 20:
-		return [text]
+def edit(word):
+	if len(word) > 20:
+		return [word]
 	else:
-		inserts = [text[:i] + c + text[i:] for i in range(len(text)) for c in ALPHABET]
-		deletes = [text[:i] + text[i+1:] for i in range(len(text)-1) for c in ALPHABET]
-		replaces = [text[:i] + c + text[i+1:] for i in range(len(text)-1) for c in ALPHABET]
+		inserts = [word[:i] + c + word[i:] for i in range(len(word)) for c in ALPHABET]
+		deletes = [word[:i] + word[i+1:] for i in range(len(word)-1) for c in ALPHABET]
+		replaces = [word[:i] + c + word[i+1:] for i in range(len(word)-1) for c in ALPHABET]
+		
+	if word in UNIGRAM:
+		return [word] + list(set(inserts + deletes + replaces))
+	else:
 		return list(set(inserts + deletes + replaces))
 
 def edits(text, score=1):

@@ -12,7 +12,3 @@ def correct(text):
 	states = gen_states(obs)
 	result = viterbi_decoder(obs, states)
 	return " ".join(result)
-
-if __name__ == '__main__':
-	text = 'ux bar snhan dan'
-	print(correct(text))
