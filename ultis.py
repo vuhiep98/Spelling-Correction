@@ -1,8 +1,6 @@
 import pandas as pd
 import re
 
-from dictionary import UNIGRAM
-
 def remove_diacritics(text):
 	diacritic_characters = u'ÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝàáâãèéêìíòóôõùúý'+\
 			'ĂăĐđĨĩŨũƠơƯưẠạẢảẤấẦầẨẩẪẫẬậẮắẰằẲẳẴẵẶặ'+\
@@ -76,13 +74,10 @@ def edit(word):
 		return [word]
 	else:
 		inserts = [word[:i] + c + word[i:] for i in range(len(word)) for c in ALPHABET]
-		deletes = [word[:i] + word[i+1:] for i in range(len(word)-1) for c in ALPHABET]
-		replaces = [word[:i] + c + word[i+1:] for i in range(len(word)-1) for c in ALPHABET]
+		deletes = [word[:i] + word[i+1:] for i in range(len(word)) for c in ALPHABET]
+		replaces = [word[:i] + c + word[i+1:] for i in range(len(word)) for c in ALPHABET]
 		
-	if word in UNIGRAM:
 		return [word] + list(set(inserts + deletes + replaces))
-	else:
-		return list(set(inserts + deletes + replaces))
 
 def edits(text, score=1):
 	candidates = edit(text)
@@ -92,3 +87,4 @@ def edits(text, score=1):
 			new_candidates = list(set(new_candidates + edit(c)))
 		candidates = list(set(candidates + new_candidates))
 	return candidates
+
