@@ -136,3 +136,4 @@ dmypy.json
 data/
 output.txt
 run.py
+viterbi_tracking.txt
