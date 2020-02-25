@@ -1,35 +1,35 @@
-from ultis import memo, encode_numbers, decode_numbers, remove_diacritics
-from dictionary import cpw, pwords
+from ultis import memo, remove_diacritics
+from dictionary import Dictionary
 from math import log10
 
-# combine
-def combine(Pfirst, first, rest):
-	return Pfirst + rest[0], [first] + rest[1]
+class Segmentator:
 
-# split strings
-def splits(text, max_word_length=20):
-	return [(text[:i+1], text[i+1:]) for i in range(min(len(text), max_word_length))]
+	def __init__(self):
+		self.dictionary = Dictionary()
+	
+	def _combine(self, Pfirst, first, rest):
+		return Pfirst + rest[0], [first] + rest[1]
+	
+	def _splits(self, text, max_word_length=20):
+		return [(text[:i+1], text[i+1:]) for i in range(min(len(text), max_word_length))]
 
-# segment token
-@memo
-def segment_tokens(text):
-	if not text:
-		return []
-	candidates = ([first] + segment_tokens(rest) for first, rest in splits(text))
-	return max(candidates, key=pwords)
+	@memo
+	def _segment_token(self, text):
+		if not text:
+			return []
+		candidates = ([first] + self._segment_token(rest) for first, rest in self._splits(text))
+		return max(candidates, key=self.dictionary.pwords)
+	
+	@memo
+	def _segment_token_2(self, text, prev="<START>"):
+		if not text:
+			return 0.0, []
+		candidates = [self._combine(-log10(self.dictionary.cpw(first, prev)), first, self._segment_token_2(rest, first))
+				for first, rest in self._splits(text)]
+		return min(candidates)
 
-# segment token based on conditional probability
-@memo
-def segment_tokens_2(text, prev="<START>"):
-	if not text:
-		return 0.0, []
-	candidates = [combine(-log10(cpw(first, prev)), first, segment_tokens_2(rest, first))
-			for first, rest in splits(text)]
-	return min(candidates)
-
-# segment wrapper
-def segment(text):
-	text = remove_diacritics(text)
+def segment(self, text):
+	# text = remove_diacritics(text)
 	text = "".join(text.split())
-	result = " ".join(segment_tokens(text))
+	result = " ".join(self._segment_token(text))
 	return result
