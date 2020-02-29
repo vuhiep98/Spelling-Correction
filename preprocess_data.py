@@ -2,27 +2,21 @@ import os, re, string
 from tqdm import tqdm
 from collections import Counter
 
+DIGIT = '<num>'
+
 def encode_numbers(text):
-	tokens = text.split()
-	for i, t in enumerate(tokens):
-		if any([d in t for d in string.digits]):
-			tokens[i] = '<num>'
-	text = ' '.join(tokens)
+	text = re.sub(r'[\S]*\d+[\S]*', DIGIT, text)
 	return text
 
 def preprocess(text):
 	text = text.strip().lower()
 	text = encode_numbers(text)
-	# text = re.sub('\n|\.$|"|”|“|\'|\(|\)|,|:|;|(\.{2,})|…', '', text)
-	# text = re.sub('\.\s+', ' ', text)
-	# text = re.sub('\s{2,}', ' ', text)
-	# text = re.sub('\s–\s|–\s|\s–|\s-\s|-\s|\s-', ' ', text)
 	return text
 	
 
 def read_about(folder_number):
 	abouts = []
-	for i in tqdm(range(folder_number*10000, (folder_number+1)*10000), desc=str(folder_num)):
+	for i in tqdm(range(folder_number*10000, (folder_number+1)*10000), desc=str(folder_number)):
 		file_directory = 'STM project/data_original_files' + \
 						  str(folder_number*10000) + '-' + \
 						  str((folder_number+1)*10000-1) + '/' + \
@@ -33,35 +27,22 @@ def read_about(folder_number):
 	return abouts
 
 def drop_na(sent):
-	return True if sent not in ['', '#'] else False
-
+	return True if sent not in ['', DIGIT] else False
 
 def read_content(content_path):
 	if os.path.isfile(content_path):
 		sentences = []
 		with open(content_path, 'r', encoding='utf-8') as reader:
-			content = reader.read()
-			# content = re.sub('\s{2,}', ' ', content)
-			content = re.sub('\n', ' ', content)
-			lines = re.split('\s{3,}', content)
-#             lines = re.split("\n", reader.read())
-			for line in lines:
-				if '|' in line: continue
-		#         unigrams.append(re.findall('\w+', line))
-		#         line = re.sub('\(|\)|:|(\.$)|(^\d+\.)|/^\d\./gm', '', line.lower())
-		#         unigrams += line.split()
-#                 line = preprocess(line)
-				sents = []
-				line = encode_numbers(line)
-				for sent in re.split('\.|\?|:', line):
-#                     sent = re.sub('(^/)|(\?)', '', sent)
-#                     sent = sent.strip()
-
-					sent = sent.lower()
-					sent = " ".join(re.findall('<num>|\w+', sent))
-					sents.append(sent)
-				sentences += sents
-		return list(filter(drop_na, sentences))
+			lines = [re.sub('\s{2,}|\t+', ' ', encode_numbers(line.lower())) for line in reader.readlines() if "|" not in line]
+			lines = ['<break>\n' if line == '\n' else line for line in lines]
+			lines = [line.replace('\n', ' ') for line in lines]
+			content = "".join(lines)
+			sents = re.split(r'<break>|[.;:?]', content)
+			for sent in sents:
+				tokens = re.findall(r'<num>|\b\S+\b', sent)
+				tokens = [''.join(re.findall(r'\w+', token)) if token!='<num>' else token for token in tokens]
+				sentences.append(tokens)
+			return sentences
 	else:
 		return []
 
@@ -130,7 +111,7 @@ def preprocess_data():
 	return cnt_uni
 
 if __name__ == '__main__':
-	content = read_content('data/31288_content.txt')
+	content = read_content('data/70002_content.txt')
 	with open('output.txt', 'w+', encoding='utf-8') as writer:
 		for c in content:
 			writer.write(str(c) + '\n')
