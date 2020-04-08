@@ -1,8 +1,10 @@
-import os, re, string
+import os, re, string, json
 from tqdm import tqdm
 from collections import Counter
 
 DIGIT = '<num>'
+DATA_FOLDER = 'STM project/'
+MODEL_PATH = 'model/abouts/'
 
 def encode_numbers(text):
 	text = re.sub(r'[\S]*\d+[\S]*', DIGIT, text)
@@ -13,11 +15,10 @@ def preprocess(text):
 	text = encode_numbers(text)
 	return text
 	
-
 def read_about(folder_number):
 	abouts = []
-	for i in tqdm(range(folder_number*10000, (folder_number+1)*10000), desc=str(folder_number)):
-		file_directory = 'STM project/data_original_files' + \
+	for i in range(folder_number*10000, (folder_number+1)*10000):
+		file_directory = DATA_FOLDER + 'data_original_files' + \
 						  str(folder_number*10000) + '-' + \
 						  str((folder_number+1)*10000-1) + '/' + \
 						  str(i) + '_about.txt'
@@ -33,7 +34,7 @@ def read_content(content_path):
 	if os.path.isfile(content_path):
 		sentences = []
 		with open(content_path, 'r', encoding='utf-8') as reader:
-			lines = [re.sub('\s{2,}|\t+', ' ', encode_numbers(line.lower())) for line in reader.readlines() if "|" not in line]
+			lines = [re.sub(r'\s{2,}|\t+', ' ', encode_numbers(line.lower())) for line in reader.readlines() if "|" not in line]
 			lines = ['<break>\n' if line == '\n' else line for line in lines]
 			lines = [line.replace('\n', ' ') for line in lines]
 			content = "".join(lines)
@@ -46,38 +47,63 @@ def read_content(content_path):
 	else:
 		return []
 
-
-def preprocess_data():
-	start = 41
-	end = 42
+def preprocess_about_data():
+	start = 0
+	end = 50
 
 	unigrams = {}
-	# if os.path.isfile('STM_n_gram_models/new_content_models/unigrams.txt'):
-	# 	with open('STM_n_gram_models/new_content_models/unigrams.txt', 'r', encoding='utf-8') as reader:
-	# 		for line in reader.readlines():
-	# 			unis = line.replace('\n', '').split()
-	# 			unigrams[unis[0]] = int(unis[1])
-	# 	reader.close()
-
 	bigrams = {}
-	# if os.path.isfile('STM_n_gram_models/new_content_models/bigrams.txt'):
-	# 	with open('STM_n_gram_models/new_content_models/bigrams.txt', 'r', encoding='utf-8') as reader:
-	# 		for line in reader.readlines():
-	# 			bis = line.replace('\n', '').split()
-	# 			bigrams[bis[0]+' '+bis[1]] = int(bis[2])
-	# 	reader.close()
-
 	trigrams = {}
-	# if os.path.isfile('STM_n_gram_models/new_content_models/trigrams.txt'):
-	# 	with open('STM_n_gram_models/new_content_models/trigrams.txt', 'r', encoding='utf-8') as reader:
-	# 		for line in reader.readlines():
-	# 			tris = line.replace('\n', '').split()
-	# 			trigrams[tris[0]+' '+tris[1]+' '+tris[2]] = int(tris[3])
-	# 	reader.close()
+
+	for i in tqdm(range(start, end+1), desc="Process abouts"):
+		for about in read_about(i):
+			tokens = re.findall(r'<num>|\w+')
+			for j in range(len(tokens)):
+				if tokens[j] not in unigrams:
+					unigrams[tokens[j]] = 1
+				else:
+					unigrams[tokens[j]] += 1
+
+				if j < len(tokens)-2:
+					bigram = " ".join(tokens[j:j+2])
+					if bigram not in bigrams:
+						bigrams[bigram] = 1
+					else:
+						bigrams[bigram] += 1
+
+				if j < len(tokens)-3:
+					trigram = " ".join(tokens[j:j+3])
+					if trigram not in trigrams:
+						trigrams[trigram] = 1
+					else:
+						trigrams[trigram] +=1
+	
+	unigrams = {k:v for k, v in sorted(unigrams.items(), key=lambda x: x[1])}
+	bigrams = {k:v for k, v in sorted(bigrams.items(), key=lambda x: x[1])}
+	trigrams = {k:v for k, v in sorted(trigrams.items(), key=lambda x: x[1])}
+
+	with open(MODEL_PATH + 'unigrams.txt', 'w+', encoding='utf-8') as writer:
+		for k, v in unigrams.items():
+			writer.write(k + ' ' + str(v) + '\n')
+
+	with open(MODEL_PATH + 'bigrams.txt', 'w+', encoding='utf-8') as writer:
+		for k, v in bigrams.items():
+			writer.write(k + ' ' + str(v) + '\n')
+
+	with open(MODEL_PATH + 'trigrams.txt', 'w+', encoding='utf-8') as writer:
+		for k, v in trigrams.items():
+			writer.write(k + ' ' + str(v) + '\n')
+
+
+def preprocess_content_data(start=0, end=10):
+
+	unigrams = {}
+	bigrams = {}
+	trigrams = {}
 
 	for i in range(start, end+1):
 		for j in tqdm(range(i*10000, (i+1)*10000), desc=str(i), ascii=True):
-			for sent in read_content('STM Project/data_original_files' + str(i*10000) + '-' + str((i+1)*10000-1) + \
+			for sent in read_content(DATA_FOLDER + 'data_original_files' + str(i*10000) + '-' + str((i+1)*10000-1) + \
 									 '/' + str(j) + '_content.txt'):
 				words = ['<START>'] + sent.split() + ['<END>']
 				for index, w in enumerate(words):
@@ -94,24 +120,41 @@ def preprocess_data():
 	cnt_bi = sorted(Counter(bigrams).items(), key=lambda x: x[1], reverse=True)
 	cnt_tri = sorted(Counter(trigrams).items(), key=lambda x: x[1], reverse=True)
 
-	# with open('STM_n_gram_models/new_content_models/unigrams.txt', 'a+', encoding='utf-8') as writer:
-	# 	for uni in cnt_uni:
-	# 		writer.write(str(uni[0]) + ' ' + str(uni[1]) + '\n')
-	# writer.close()
+	with open(MODEL_PATH + 'unigrams' + str(start) + '_' + str(end) + '.txt', 'w+', encoding='utf-8') as writer:
+		for uni in cnt_uni:
+			writer.write(str(uni[0]) + ' ' + str(uni[1]) + '\n')
 
-	# with open('STM_n_gram_models/new_content_models/bigrams.txt', 'a+', encoding='utf-8') as writer:
-	# 	for bi in cnt_bi:
-	# 		writer.write(str(bi[0]) + ' ' + str(bi[1]) + '\n')
-	# writer.close()
+	with open(MODEL_PATH + 'bigrams' + str(start) + '_' + str(end) + '.txt', 'w+', encoding='utf-8') as writer:
+		for bi in cnt_bi:
+			writer.write(str(bi[0]) + ' ' + str(bi[1]) + '\n')
 
-	# with open('STM_n_gram_models/new_content_models/trigrams.txt', 'a+', encoding='utf-8') as writer:
-	# 	for tri in cnt_tri:
-	# 		writer.write(str(tri[0]) + ' ' + str(tri[1]) + '\n')
+	with open(MODEL_PATH + 'trigrams' + str(start) + '_' + str(end) + '.txt', 'w+', encoding='utf-8') as writer:
+		for tri in cnt_tri:
+			writer.write(str(tri[0]) + ' ' + str(tri[1]) + '\n')
 
-	return cnt_uni
+def generate_context_dict():
+	trigrams = {}
+	with open(MODEL_PATH + "trigrams.txt", "r", encoding="utf-8") as reader:
+		for line in tqdm(reader.readlines(), desc="Load trigrams for context dictionary"):
+			last_space = line.rindex(" ")
+			key, value = line[:last_space], int(line[last_space+1:])
+			trigrams[key] = value
+	
+	context_dict = {}
+	for tri in tqdm(trigrams, desc="Build context dictionary"):
+		tokens = tri.split()
+		context = tokens[0] + " " + tokens[2]
+		if tokens[1] not in context_dict:
+			context_dict[tokens[1]] = {context: trigrams[tri]}
+		elif context not in context_dict[tokens[1]]:
+			context_dict[tokens[1]][context] = trigrams[tri]
+		else:
+			context_dict[tokens[1]][context] += trigrams[tri]
+	
+	with open(MODEL_PATH + "context_dict.txt", "w+", encoding="utf-8") as writer:
+		writer.write(json.dumps(context_dict, indent=4, ensure_ascii=False))
 
 if __name__ == '__main__':
-	content = read_content('data/70002_content.txt')
-	with open('output.txt', 'w+', encoding='utf-8') as writer:
-		for c in content:
-			writer.write(str(c) + '\n')
+	# preprocess_data(0, 10)
+	generate_context_dict()
+	# preprocess_about_data()
