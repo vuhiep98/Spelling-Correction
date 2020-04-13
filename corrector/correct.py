@@ -18,17 +18,18 @@ class Corrector(Dictionary):
 		states = {}
 		new_obs = []
 		for i, ob in enumerate(obs):
-			if len(ob)==1 and re.match(r"[^aáàảãạăằắẳẵặâầấẩẫậeèéẻẽẹêềếểễệiìíỉĩịoóòỏõọôồốổỗộơờớởỡợuùúủũụưừứửữựyỳýỷỹỵ]", ob):
-				continue
 			states[ob] = []
+			if len(ob)==1 and re.match(r"[^aáàảãạăằắẳẵặâầấẩẫậeèéẻẽẹêềếểễệiìíỉĩịoóòỏõọôồổỗộơờớỡợuùúũụưứửữựỳýỷỹỵ]", ob):
+				continue
 			new_obs += [ob]
-			candidates = [suggestion.term for suggestion in 
-								self.symspell.lookup(phrase=ob,
+			candidates = self.symspell.lookup(phrase=ob,
 			                                  verbosity=self.verbosity,
 			                                  max_edit_distance=2,
 			                                  include_unknown=True,
-			                                  ignore_token=r'<START>|<END>|<num>')][:10]
-			states[ob] = candidates
+			                                  ignore_token=r'<START>|<END>|<num>')
+
+			candidates = sorted(candidates, key=lambda x:(x.distance, -self.uni_dict.get(x.term, 0)))[:30]
+			states[ob] = [c.term for c in candidates]
 		return new_obs, states
 	
 	def _trans(self, cur, prev, prev_prev=None):
@@ -72,6 +73,7 @@ class Corrector(Dictionary):
 			path = new_path
 
 		with open('data/viterbi_tracking.txt', 'w+', encoding='utf-8') as writer:
+			# writer.write(json.dumps(path, indent=4, ensure_ascii=False) + '\n')
 			writer.write(json.dumps(V, indent=4, ensure_ascii=False) + '\n')
 
 		_, state = min([(V[-1][st], st) for st in states[obs[-1]]])
