@@ -6,15 +6,46 @@
 		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
 		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"></script>
+
+		<style>
+			.big-title {
+				color: red;
+				margin-top: 100px;
+			}
+
+			.corrected-query {
+				color: blue;
+				font-style: italic;
+				font-weight: bold;
+				margin-left: 10px;
+			}
+
+			#input-text-box {
+				margin-top: 75px;
+			}
+
+			#input-query {
+				height: 50px;
+				font-size: 20px;
+			}
+
+			#suggestion {
+				display: None;
+				margin-top: 50px;
+			}
+
+		</style>
 	</head>
 	<body>
 		<div class="container-sm">
-			<input type="text" id="input-query" class="form-control">
-			<button id="send-button" onclick="send_request()">Sửa lỗi chính tả</button>
+			<div class="big-title"><h1 align="center">Tự động sửa lỗi chính tả cho truy vấn tìm kiếm</h1></div>
+			<div class="row" id="input-text-box">
+				<input type="text" id="input-query" class="form-control input-group-lg rounded-pill" placeholder="Nhập cụm từ tại đây (Nhấn Enter để sửa lỗi)">
+			</div>
 		</div>
-		<div id="suggestion" style="display: None">
-			<label>Kết quả sửa lỗi</label>
-			<label id="correction-result" style="color: red;font-style: italic;font-weight: bold"></label>
+		<div id="suggestion" class="container-sm">
+			<label class="title"><h3>Kết quả sửa lỗi</h3></label>
+			<label class="corrected-query" id="correction-result"></label>
 		</div>
 
 		<script type="text/javascript" src="static/main.js"></script>

@@ -47,7 +47,7 @@ NUMBER = "<num>"
 def encode_numbers(text):
 	numbers = re.findall(r"[\S]*\d+[\S]*", text)
 	for num in numbers:
-		text = re.sub(num, NUMBER, text)
+		text = text.replace(num, NUMBER, 1)
 	return text, numbers
 
 def decode_numbers(text, numbers):

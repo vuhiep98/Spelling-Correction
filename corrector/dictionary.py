@@ -24,14 +24,16 @@ class Dictionary:
 	def _from_text(cls, file_name="unigrams"):
 		dct = {}
 		n = 0
+		threshold = 5
 		
 		with open(model_dir + file_name + ".txt", "r", encoding="utf-8") as reader:
 			for line in tqdm(reader.readlines(), desc=file_name):
 				line = line.replace("\n", "")
 				key = line[:line.rindex(" ")]
 				value = int(line[line.rindex(" ")+1:])
-				dct[key] = value
-				n += value
+				if value >= threshold:
+					dct[key] = value
+					n += value
 		return dct, n
 	
 	def _common_contexts(self, word, suggestion):
@@ -43,12 +45,11 @@ class Dictionary:
 	@classmethod
 	def load_symspell(cls):
 		cls.symspell = SymSpell(
-			max_dictionary_edit_distance=2,
-			count_threshold=20,
+			max_dictionary_edit_distance=3,
+			count_threshold=3,
 		)
 		cls.symspell.load_dictionary(
 			corpus = model_dir + "unigrams.txt",
-			# corpus = "model/non_diacritic_model/unigrams.txt",
 			term_index = 0,
 			count_index = 1,
 			separator=" ",
@@ -60,8 +61,7 @@ class Dictionary:
 		cls.uni_dict, cls.n_uni = cls._from_text(file_name="unigrams")
 		cls.bi_dict, cls.n_bi = cls._from_text(file_name="bigrams")
 		cls.tri_dict, cls.n_tri = cls._from_text(file_name="trigrams")
-		# cls.uni_segment, cls.n_uni_segment = cls._from_text(file_name="non_diacritic_model/unigrams")
-		# cls.bi_segment, cls.n_bi_segment = cls._from_text(file_name="non_diacritic/bigrams") 
+		cls._d = 0.75
 	
 	@classmethod
 	def load_context_dict(cls):
@@ -75,49 +75,97 @@ class Dictionary:
 	def load_diacritic_adder(cls):
 		with open(diacritic_adder, "r", encoding="utf-8") as reader:
 			cls.diacritic_adder = json.load(reader.read())
-
-	@memo
-	def pw_segment(self, word):
-		try:
-			return float(self.uni_segment[word])/self.n_uni_segment
-		except KeyError:
-			return 10./(self.n_uni_segment * 10**len(word))
 	
-	@memo
+	def _c1w(self, word):
+		return self.uni_dict.get(word, 0)
+
+	def _c2w(self, phrase):
+		return self.bi_dict.get(phrase, 0)
+	
+	def _c3w(self, phrase):
+		return self.tri_dict.get(phrase, 0)
+
 	def pw(self, word):
-		try:
-			return float(self.uni_dict[word])/self.n_uni
-		except KeyError:
-			return 10./(self.n_uni * 10**len(word))
-
-	@memo
-	def p2w(self, phrase):
-		try:
-			return float(self.bi_dict[phrase])/self.n_bi
-		except:
-			return 10./(self.n_bi * 10**len(phrase))
+		return float(self._c1w(word)+1)/self.n_uni
 	
 	@memo
-	def p3w(self, phrase):
-		try:
-			return float(self.tri_dict[phrase])/self.n_tri
-		except KeyError:
-			return 10./(self.n_tri * 10**len(phrase))
-
-	def pwords(self, words):
-		return product([self.pw(word) for word in words])
-
-	def pwords_segment(self, words):
-		return product([self.pw_segment(word) for word in words])
-	
 	def cpw(self, word, prev):
+		return float(self._c2w(prev + " " + word)+1)/(self._c1w(prev)+self.n_uni)
+
+	def _k_coeff(self, cur, prev, prev_prev):
+		k = {}
+		k["2"] = (log(self._c2w(prev + ' ' + cur)+1)+1)/\
+					(log(self._c2w(prev + ' ' + cur)+1)+2)
+		k["3"] = (log(self._c3w(prev_prev + ' ' + prev + ' ' + cur)+1)+1)/\
+					(log(self._c3w(prev_prev + ' ' + prev + ' ' + cur)+1)+2)
+		return k
+
+	def _delta_coeff(self, cur, prev, prev_prev):
+		k = self._k_coeff(cur, prev, prev_prev)
+		delta = {}
+		delta["1"] = k["3"]
+		delta["2"] = (1 - k["3"])*k["2"]
+		delta["3"] = (1 - k["3"])*(1 - k["2"])
+		return delta
+
+	@memo
+	def _lambda(self, prev, prev_prev=None):
+		freq = 0
+		if prev_prev is None:
+			freq = sum([val for key, val in self.bi_dict.items() if prev==key.split()[0]])
+			return (self._d/self._c1w(prev))*freq
+		else:
+			phrase = prev_prev + ' ' + prev
+			freq = sum([val for key, val in self.tri_dict.items() 
+			           if phrase==' '.join(key.split()[:2])])
+			return (self._d/self._c2w(phrase))*freq
+
+	@memo
+	def _p_cont(self, cur, prev=None):
+		if prev is None:
+			freq = sum([val for key, val in self.bi_dict.items()
+			           if cur==key.split()[1]])
+			return float(freq)/self.n_bi
+		else:
+			phrase = prev + ' ' + cur
+			freq = sum([val for key, val in self.tri_dict.items()
+			           if phrase==' '.join(key.split()[-2:])])
+			return float(freq)/self.n_tri
+
+	# def _p3w(self, word, prev, prev_prev):
+	# 		return float(self._c3w(prev_prev + " " + prev + " " + word)+1)/\
+	# 				(self._c2w(prev_prev + " " + prev)+self.n_bi)
+
+	@memo
+	def cpw(self, cur, prev):
 		try:
-			return self.p2w(prev + " " + word)/self.pw(prev)
-		except KeyError:
-			return self.pw(word)
-	
-	def cp3w(self, word, prev, prev_prev):
+			first_term = float(max(self._c2w(prev + ' ' +cur) - self._d, 0))/\
+						self._c1w(prev)
+		except ZeroDivisionError:
+			first_term = 0
+
+		kn_lambda = self._lambda(prev)
+		p_cont = self._p_cont(cur)
+
+		return first_term + kn_lambda*p_cont
+
+	@memo
+	def cp3w(self, cur, prev, prev_prev):
 		try:
-			return self.p3w(prev_prev + " " + prev + " " + word)/self.p2w(prev_prev + " " + prev)
-		except KeyError:
-			return self.p2w(prev_prev + " " + prev)
+			first_term = float(max(self._c3w(prev_prev + ' ' + prev + ' ' + cur) - self._d, 0))/\
+						self._c2w(prev_prev + ' ' + prev)
+		except ZeroDivisionError:
+			first_term = 0
+
+		kn_lambda = self._lambda(prev, prev_prev)
+		p_cont = self._p_cont(cur, prev)
+
+		return first_term + kn_lambda*p_cont
+
+	# @memo
+	# def cp3w(self, cur, prev, prev_prev):
+	# 	delta = self._delta_coeff(cur, prev, prev_prev)
+	# 	prob = delta["1"]*self._p3w(cur, prev, prev_prev) + \
+	# 		   delta["2"]*self.cpw(cur, prev) + \
+	# 		   delta["3"]*self.pw(cur)
+	# 	return prob
