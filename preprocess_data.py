@@ -4,7 +4,7 @@ from collections import Counter
 
 DIGIT = '<num>'
 DATA_FOLDER = 'STM project/'
-MODEL_PATH = 'model/abouts/'
+MODEL_PATH = 'model/new_content/'
 
 def encode_numbers(text):
 	text = re.sub(r'[\S]*\d+[\S]*', DIGIT, text)
@@ -134,15 +134,15 @@ def preprocess_content_data(start=0, end=10):
 
 def generate_context_dict():
 	trigrams = {}
+	context_dict = {}
 	with open(MODEL_PATH + "trigrams.txt", "r", encoding="utf-8") as reader:
 		for line in tqdm(reader.readlines(), desc="Load trigrams for context dictionary"):
 			last_space = line.rindex(" ")
 			key, value = line[:last_space], int(line[last_space+1:])
 			trigrams[key] = value
 	
-	context_dict = {}
 	for tri in tqdm(trigrams, desc="Build context dictionary"):
-		tokens = tri.split()
+		tokens = tri.split('_')
 		context = tokens[0] + " " + tokens[2]
 		if tokens[1] not in context_dict:
 			context_dict[tokens[1]] = {context: trigrams[tri]}
