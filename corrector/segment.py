@@ -22,8 +22,8 @@ class Segmentor(Dictionary):
 	# 	else:
 	# 		return 0
 
-	# def _split(self, text):
-	# 	return [text[i:] + ' ' + text[i:] for i in range(1, len(text))]
+	def _split(self, text):
+		return [(text[:i], text[i:]) for i in range(1, len(text))]
 
 	# def _find_can(self, term):
 	# 	can = self.symspell.lookup(term, max_edit_distance=1, verbosity=Verbosity.ALL)
@@ -47,9 +47,11 @@ class Segmentor(Dictionary):
 	# 		return token
 
 	def _segment_token(self, text):
-		return self.symspell.word_segmentation(text,
-		                                       max_edit_distance=2,
-		                                       ignore_token=r'<num>').segmented_string
+		if not text:
+			return []
+		candidates = [text] + [first + ' ' + self._segment_token(rest)
+						for first, rest in self._split(text)]
+		return max(candidates, key=self.p_sentence)
 
 	def segment(self, text):
 		# new_text = ''
@@ -61,4 +63,4 @@ class Segmentor(Dictionary):
 		# 	else:
 		# 		text = new_text
 		# return new_text
-		return ' '.join([self._segment_token(t) for t in text.split()])
+		return ' '.join([self._segment_token(t) for t in text.split() if t not in self.uni_dict])

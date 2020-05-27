@@ -4,14 +4,17 @@ from math import log, log10
 from tqdm import tqdm
 import json
 from symspellpy.symspellpy import SymSpell
+from textdistance import levenshtein
+import numpy as np
 
 sys.path.insert(0, dirname(dirname(realpath(__file__))))
 
 from corrector.ultis import product, memo
 
 
-model_dir="model/new/"
+model_dir="model/new_content/"
 diacritic_adder="model/diacritic_adder.txt"
+context_dict_dir="model/new_content/context_dict.txt"
 
 
 class Dictionary:
@@ -24,26 +27,23 @@ class Dictionary:
 	def _from_text(cls, file_name="unigrams"):
 		dct = {}
 		n = 0
-		threshold = 5
+		threshold = 0
 		
 		with open(model_dir + file_name + ".txt", "r", encoding="utf-8") as reader:
 			for line in tqdm(reader.readlines(), desc=file_name):
 				line = line.replace("\n", "")
-				key = line[:line.rindex(" ")]
-				value = int(line[line.rindex(" ")+1:])
+				key, value = line.split()
+				# value = int(line[line.rindex(" ")+1:])
+				value = int(value)
 				if value >= threshold:
 					dct[key] = value
 					n += value
 		return dct, n
 	
-	def _common_contexts(self, word, suggestion):
-		word_contexts = self.context_dict.get(word, [])
-		suggestion_contexts = self.context_dict.get(suggestion, [])
-		return sum([suggestion_contexts[c] for c in suggestion_contexts 
-		           	if c in word_contexts and suggestion_contexts[c] >= word_contexts[c]])
 	
 	@classmethod
 	def load_symspell(cls):
+		print('Symspell object...')
 		cls.symspell = SymSpell(
 			max_dictionary_edit_distance=3,
 			count_threshold=3,
@@ -65,16 +65,59 @@ class Dictionary:
 	
 	@classmethod
 	def load_context_dict(cls):
-		with open(model_dir + "context_dict.txt", "r", encoding="utf-8") as reader:
+		print('Context dictionary...')
+		with open(context_dict_dir, "r", encoding="utf-8") as reader:
 			try:
 				cls.context_dict = json.load(reader)
 			except FileNotFoundError:
 				print("Context dictionary does not exist")
 
 	@classmethod
+	def create_cont_dict(cls):
+		cls.cont_dict_2 = {}
+		for bi, freq in tqdm(cls.bi_dict.items(), desc='Bigram contianuation'):
+			tokens = bi.split('_')
+
+			if tokens[0] not in cls.cont_dict_2:
+				cls.cont_dict_2[tokens[0]] = {
+					'before': freq,
+					'after': 0
+				}
+			else:
+				cls.cont_dict_2[tokens[0]]['before'] += freq
+
+			if tokens[1] not in cls.cont_dict_2:
+				cls.cont_dict_2[tokens[1]] = {
+					'before': 0,
+					'after': freq
+				}
+			else:
+				cls.cont_dict_2[tokens[1]]['after'] += freq
+
+		cls.cont_dict_3 = {}
+		for tri, freq in tqdm(cls.tri_dict.items(), desc='Trigram contianuation'):
+			tokens = tri.split('_')
+			phrase = tokens[0] + ' ' + tokens[1]
+
+			if phrase not in cls.cont_dict_3:
+				cls.cont_dict_3[phrase] = freq
+			else:
+				cls.cont_dict_3[phrase] += freq
+
+			# if tokens[2] not in cls.cont_dict_3:
+			# 	cls.cont_dict_3[tokens[2]] = freq
+			# else:
+			# 	cls.cont_dict_3[tokens[2]] += freq
+
+	@classmethod
 	def load_diacritic_adder(cls):
+		print('Diacritic adder...')
+		cls.diacritic = []
 		with open(diacritic_adder, "r", encoding="utf-8") as reader:
-			cls.diacritic_adder = json.load(reader.read())
+			line = reader.readline()
+			while line:
+				cls.diacritic.append([c for c in line.replace('\n', '')])
+				line = reader.readline()
 	
 	def _c1w(self, word):
 		return self.uni_dict.get(word, 0)
@@ -86,60 +129,33 @@ class Dictionary:
 		return self.tri_dict.get(phrase, 0)
 
 	def pw(self, word):
-		return float(self._c1w(word)+1)/self.n_uni
-	
-	@memo
-	def cpw(self, word, prev):
-		return float(self._c2w(prev + " " + word)+1)/(self._c1w(prev)+self.n_uni)
-
-	def _k_coeff(self, cur, prev, prev_prev):
-		k = {}
-		k["2"] = (log(self._c2w(prev + ' ' + cur)+1)+1)/\
-					(log(self._c2w(prev + ' ' + cur)+1)+2)
-		k["3"] = (log(self._c3w(prev_prev + ' ' + prev + ' ' + cur)+1)+1)/\
-					(log(self._c3w(prev_prev + ' ' + prev + ' ' + cur)+1)+2)
-		return k
-
-	def _delta_coeff(self, cur, prev, prev_prev):
-		k = self._k_coeff(cur, prev, prev_prev)
-		delta = {}
-		delta["1"] = k["3"]
-		delta["2"] = (1 - k["3"])*k["2"]
-		delta["3"] = (1 - k["3"])*(1 - k["2"])
-		return delta
+		return float(self._c1w(word))/self.n_uni
 
 	@memo
 	def _lambda(self, prev, prev_prev=None):
-		freq = 0
 		if prev_prev is None:
-			freq = sum([val for key, val in self.bi_dict.items() if prev==key.split()[0]])
-			return (self._d/self._c1w(prev))*freq
+			try:
+				return (self._d/self._c1w(prev))*self.cont_dict_2[prev]['before']
+			except (ZeroDivisionError, KeyError):
+				return 0
 		else:
-			phrase = prev_prev + ' ' + prev
-			freq = sum([val for key, val in self.tri_dict.items() 
-			           if phrase==' '.join(key.split()[:2])])
-			return (self._d/self._c2w(phrase))*freq
+			phrase = prev_prev + '_' + prev
+			try:
+				return (self._d/self._c2w(phrase))*self.cont_dict_3[phrase]
+			except (ZeroDivisionError, KeyError):
+				return 0
 
 	@memo
-	def _p_cont(self, cur, prev=None):
-		if prev is None:
-			freq = sum([val for key, val in self.bi_dict.items()
-			           if cur==key.split()[1]])
-			return float(freq)/self.n_bi
-		else:
-			phrase = prev + ' ' + cur
-			freq = sum([val for key, val in self.tri_dict.items()
-			           if phrase==' '.join(key.split()[-2:])])
-			return float(freq)/self.n_tri
-
-	# def _p3w(self, word, prev, prev_prev):
-	# 		return float(self._c3w(prev_prev + " " + prev + " " + word)+1)/\
-	# 				(self._c2w(prev_prev + " " + prev)+self.n_bi)
+	def _p_cont(self, word):
+		try:
+			return float(self.cont_dict_2[word]['after'])/self.n_bi
+		except KeyError:
+			return 0
 
 	@memo
 	def cpw(self, cur, prev):
 		try:
-			first_term = float(max(self._c2w(prev + ' ' +cur) - self._d, 0))/\
+			first_term = float(max(self._c2w(prev + '_' +cur) - self._d, 0))/\
 						self._c1w(prev)
 		except ZeroDivisionError:
 			first_term = 0
@@ -152,13 +168,13 @@ class Dictionary:
 	@memo
 	def cp3w(self, cur, prev, prev_prev):
 		try:
-			first_term = float(max(self._c3w(prev_prev + ' ' + prev + ' ' + cur) - self._d, 0))/\
-						self._c2w(prev_prev + ' ' + prev)
+			first_term = float(max(self._c3w(prev_prev + '_' + prev + '_' + cur) - self._d, 0))/\
+						self._c2w(prev_prev + '_' + prev)
 		except ZeroDivisionError:
 			first_term = 0
 
 		kn_lambda = self._lambda(prev, prev_prev)
-		p_cont = self._p_cont(cur, prev)
+		p_cont = self.cpw(cur, prev)
 
 		return first_term + kn_lambda*p_cont
 
@@ -169,3 +185,23 @@ class Dictionary:
 	# 		   delta["2"]*self.cpw(cur, prev) + \
 	# 		   delta["3"]*self.pw(cur)
 	# 	return prob
+
+	def common_context(self, w_1, w_2):
+		cont_1 = set(self.context_dict.get(w_1, []))
+		cont_2 = set(self.context_dict.get(w_2, []))
+		common = cont_1.intersection(cont_2)
+		return len(common)
+
+	def p_context(self, word, candidate):
+		try:
+			return float(self.common_context(word, candidate))/len(self.context_dict.get(word, []))
+		except ZeroDivisionError:
+			return 0.0
+
+	def words_similarity(self, w1, w2):
+		return levenshtein.normalized_similarity(w1, w2)
+
+	def p_sentence(self, sentence):
+		tokens = sentence.split()
+		probs = [self.pw(token) for token in tokens]
+		return np.prod(probs)

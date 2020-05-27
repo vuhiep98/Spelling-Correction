@@ -44,10 +44,45 @@
 			</div>
 		</div>
 		<div id="suggestion" class="container-sm">
-			<label class="title"><h3>Kết quả sửa lỗi</h3></label>
-			<label class="corrected-query" id="correction-result"></label>
+			<!-- <div class="d-block">
+				<label class="title"><h3>Corrected</h3></label>
+				<label class="corrected-query" id="corrected-result"></label>
+			</div>
+			<div class="d-block">
+				<label class="title"><h3>Diacritic Added</h3></label>
+				<label class="corrected-query" id="diacritic-added-result"></label>
+			</div>	 -->
+			<label><h3>Kết quả sửa lỗi</h3></label>
+			<label class="corrected-query" id="corrected-result"></label>
 		</div>
 
-		<script type="text/javascript" src="static/main.js"></script>
+		<script type="text/javascript">
+			function send_request(){
+			var query = document.getElementById("input-query").value;
+			var query_obj = {"query": query};
+			var xhttp = new XMLHttpRequest();
+			xhttp.onreadystatechange = function() { 
+				if (this.readyState == 4 && this.status == 200) {
+					var response = JSON.parse(this.responseText);
+					var result = response['corrected']['result'];
+					
+					document.getElementById("corrected-result").innerHTML = "<h3>" + result + "</h3>";
+					document.getElementById("suggestion").style.display = "block";
+					
+					console.log(response['corrected']['result']);
+					console.log(response['corrected']['prob']);
+				}
+			};
+			xhttp.open("POST", "/correct", true);
+			xhttp.setRequestHeader("content-type", "application/json");
+			xhttp.send(JSON.stringify(query_obj));
+		}
+
+		window.addEventListener("keypress", function(e) {
+			if (e.keyCode == 13){
+			  send_request();
+			}
+		})
+		</script>
 	</body>
 </html>
